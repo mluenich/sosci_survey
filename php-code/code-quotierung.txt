@@ -1,0 +1,167 @@
+// Der Bereich zwischen den <? ?>-Tags muss auf der jeweiligen Seite eingefuegt werden. 
+// Die <? ?>-Tags duerfen dabei nicht mitkopiert werden, sie dienen nur dem Syntax-Highlighting.
+
+<?
+
+////////////////////////////////// SEITE 1 ////////////////////////////////////
+
+
+// Alle Probanden kommen mit einer klaren ID  ("TIC") von Respondi.
+// Diese steht in der URL unter der Bezeichnung "a"
+// z.B. http://soscisurvey.de/test?a=123456
+// Diesen TIC muessen wir speichern, um die Probanden hinterher an Respondi zurueck zu leiten und ggf. Cheater zu identifizieren.
+//IV02_01 wurde erstellt, hier wird der tic gespeichert, da IV01_01 bereits für die Urnenziehung vergeben ist.
+
+if (!isset($tic)) {       // Wenn die Variable $tic noch nicht gespeichert ist (Bedingung dient nur zur Sicherheit, falls jemand den "Zurueck"-Knopf im Browser benutzt o.ae. 
+  $tic = readGET('a');    // Variable zur späteren Verwendung registrieren. Dazu wird der "a"-Parameter aus der URL ausgelesen und in die PHP-Variable $tic gespeichert.
+  registerVariable('tic');// Die PHP-Variable $tic wird in den SosciSurvey-Zwischenspeicher geladen, damit sie auch auf den naechsten Seiten verfuegbar ist...
+  put('IV02_01', $tic);   // ...und noch im Datensatz gespeichert, damit man Cheater etc. hinterher Respondi melden kann. Die Interne Variable IV01_01 muss vorher in SosciSurvey angelegt sein! Es geht natuerlich auch jeder andere Variablenname, er muss dann aber hier geaendert werden.
+}
+
+?>
+
+
+
+<?
+
+////////////////////////////////// Screenout ////////////////////////////////////
+
+// Zunaechst zwei generelle Anfragen als Screenout
+// "SD01" ist die Frage nach dem Geschlecht (1=weiblich, 2=maennlich, 3=anderes)
+// "SD02_01" ist die Frage nach dem Alter
+
+if(value('SD01') == 3){    // Wenn der Wert von SD01 = 3 ist, ein Proband also weder maennlich noch weiblich ist
+  $url = "https://ausgangslink/ospe.php3?c_0002=0&return_tic=$tic"; // Hier den Screenout-Link von Respondi einfuegen und - ganz wichtig - die Variable $tic hinten anhaengen
+  redirect($url, true); // Den Probanden zur in der vorherigen Zeile definierten URL weiterleiten. Der Parameter "true" sorgt dafuer, dass der Fall nicht als "Finnished" in Sosci gekennzeichnet wird.
+}
+
+if(value('SD02_01') >= 2002){    // Dasselbe Spiel fuer alle Probanden, die juenger als oder genau 15 sind. 
+  $url = "https://ausgangslink/ospe.php3?c_0002=0&return_tic=$tic";
+  redirect($url, true);
+}
+
+// Solche Abfragen lassen sich auch fuer alle anderen Variablen erstellen oder fuer zu alte Probanden oder Probanden, die z.B. zu geringes Interesse am Forschungsgegenstand haben, ...
+
+
+// Im Folgenden wird geprueft, ob der Proband weiter kommen soll oder ob eine seiner Quoten schon voll ist.
+// Dafuer werden zunaechst das Gesamt-N und die Quoten prozentual eingetragen und die absoluten Werte ausgerechnet.
+// Anschliessend wird geprueft, in welche Gruppen der aktuelle Proband jeweils gehoert
+// Dann wird geprueft, wie viele Probanden bereits in dieser Gruppe sind.
+// Es wird geprueft ob die Zahl der Probanden in der Gruppe das Limit schon erreicht oder ueberschritten hat.
+// Falls ja, wird der Proband ausgescreent, falls nein geht es weiter
+
+$quotafull = FALSE;     // Die Grundannahme ist erstmal, dass die Quote noch NICHT voll
+$zielN = 1320;          // Hier n eintragen
+$quotesex = array(      // Es wird ein Array, also eine verschachtelete Variable, mit dem Namen $quotesex und zwei Eintraegen erstellt.
+  1 => 0.478,            // Hier Quote weiblich eintragen
+  2 => 0.522,            // Hier Quote maenlich eintragen
+);
+
+$quoteage = array(     // Wir haben hier fuenf Altersgruppen. Es koennten aber auch problemlos Gruppen hinzugefuegt oder weggelassen werden.
+  1 => 0.2,            // Hier Quote 16-29 eintragen
+  2 => 0.2,            // Hier Quote 30-39 eintragen
+  3 => 0.2,            // Hier Quote 40-49 eintragen
+  4 => 0.2,            // Hier Quote 50-59 eintragen
+  5 => 0.2,            // Hier Quote 60+ eintragen
+);
+
+// In der gleichen Form lassen sich auch weitere Quoten definieren, zum Beispiel fuer Bildung. 
+
+// Auf Basis der Quoten werden nun die absoluten Gruppengroessen ausgerechnet. 
+// Dafuer wird je Quotierungsmerkmal ein neues Array erstellt, das dieselbe Struktur hat, wie die Arrays mit den Quoten - nur eben mit absoulten Zahlen.
+
+$limitSex = array(
+  1 => round($zielN*$quotesex[1]),  // Fuer das erste Array-Element (weiblich) wird die Quote, die oben im ersten Array-Element eingetragen wurde mit dem N multipliziert
+  2 => round($zielN*$quotesex[2]),  // ... und dasselbe fuer alle Eintraege
+);
+$limitAge = array(
+  1 => round($zielN*$quoteage[1]),
+  2 => round($zielN*$quoteage[2]),
+  3 => round($zielN*$quoteage[3]),
+  4 => round($zielN*$quoteage[4]),
+  5 => round($zielN*$quoteage[5]),
+);
+
+
+// Jetzt kommen wir zurueck zum aktuellen Probanden und schauen uns an, in welche Gruppen er gehoert
+$sex = value('SD01'); // angegebenes Geschlecht in eine PHP-variable speichern. Der Wert in SoSciSurvey ist mit dem Array-Schluessel identisch (1=weiblich, 2=maennlich).
+
+$age = value('SD02_01'); // angegebenes Alter ebenfalls speichern. 
+// Da wir ja nach AltersGRUPPEN quotieren muss jetzt geprueft werden, in welche Gruppe der Proband passt.
+if ($age <= 29) {       // Falls er juenger als 30 ist -> Gruppe 1
+  $agegroup = 1;        // Die Gruppe speichern wir einfach in eine neue Variable. Der Wert entspricht wiederum dem Array-Schluessel.
+} elseif ($age <=39) {  // Falls er nicht juenger als 30 ist, aber juenger als 40...
+  $agegroup = 2;
+} elseif ($age <= 49) { // Falls er nicht juenger als 40 ist, aber juenger als 50...
+  $agegroup = 3;
+} elseif ($age <= 59) { // Falls er nicht juenger als 50 ist, aber juenger als 60...
+  $agegroup = 4;
+} else {                // Ansonsten bleibt nur noch Gruppe 5
+  $agegroup = 5;
+} 
+// Die Altersgruppen lassen sich naturlich beliebig anpassen.
+
+put('IV01_02', $agegroup);  // Die gerade bestimmte Altergruppe speichern wir auch im Datensatz ab. Dazu muss wieder eine interne Variable angelegt worden sein.
+
+// Jetzt zaehlen wir, wie viele Faelle es bereits mit den merkmalen des Probanden gibt.
+$nSex = statistic('count', 'SD01', $sex); // Wir zaehlen alle Faelle, die bei SD01 den Wert angegeben haben, der in der variable $sex gespeichert ist, also denselben Wert wie der aktuelle Proband.
+$nAge = statistic('count', 'IV01_02', $agegroup); // Dasselbe fuer die Altersgruppe
+
+
+// Jetzt ueberpruefen, ob die gerade gezaehlten Faelle das Limit schon ueberschreiten. Die Limits haben wir ja oben festgelegt.
+// Hier machen wir uns zunutze, dass die Array-Schluessel gleich dem Variablenwert fuer Geschlecht und Altersgruppe sind.
+// Wir pruefen, ob $nSex bereits gleich (oder sogar groesser) dem Limit fuer das Geschlecht des Probanden ist.
+if ($nSex >= $limitSex[$sex]) {    // Wenn die im Datensatz gefunde Anzahl der Faelle mit dem Geschlecht des Probanden groesser dem festgelegten Limit fuer das Geschlecht ist...
+  $quotafull = TRUE;               // Wird die DUmmy-Variable $quotefull auf TRUE gesetzt.
+}
+
+if ($nAge >= $limitAge[$agegroup]) {    // Wenn die im Datensatz gefunde Anzahl der Faelle mit der Altersgruppe des Probanden groesser dem festgelegten Limit fuer die Altersgruppe ist...
+  $quotafull = TRUE;                    // Wird die DUmmy-Variable $quotefull auf TRUE gesetzt.
+}
+
+if(statistic('count', 'SD01') >= $zielN){   // sicherheitshalber nochmal eine generelle Abfrage der Fallzahl
+  $quotafull = TRUE;
+}
+
+// Bei weiteren Quotirungsmerkmalen muesste man hier natuerlich weitere Abfragen hinzufuegen.
+
+// Wenn alle drei Abfragen nicht zutreffen, ist unsere $quotafull-Variable weiterhin FALSE.
+
+if($quotafull){ // Wenn $quotefull = TRUE ist...
+  $url1 = "https://ausgangslink/ospe.php3?c_0002=2&return_tic=$tic";  // Hier muss der Link fuer Quotefull eingetragen werden. Wieder die $tic-Variable am Ende nicht vergessen.
+  redirect($url1, true); // Wieder die Weiterleitung
+}
+
+// Wenn $quotafull nicht TRUE ist, passiert nichts und der Proband bekommt die Fragen, die auf dieser Seite stehen angezeigt, oder wird zur naechsten Seite weitergeleitet, falls diese Seite keinen weiteren Inhalt hat.
+
+?>
+
+
+<?
+
+////////////////////////////////// Vorletzte Seite ////////////////////////////////////
+
+// Alle, die die "letzte" Fragebogenseite erreichen, werden weitergleitet
+// Da die "end"-Seite kein PHP-erlaubt, muss noch eine Seite davor eingefuegt werden.
+// WICHTIG: Die Probanden bekommen auf dieser Seite nihcts zu sehen, sie werden ja direkt weitergeleitet. Ein eventuelles Debriefing muss also eine Seite frueher passieren.
+$url = "https://ausgangslink/ospe.php3?c_0002=1&return_tic=$tic";
+redirect($url, false);  // Dieses Mal setzen wir den Paramter in der redirect-Funktion auf "false", damit der Fall als finnished markiert wird.
+
+
+?>
+
+
+
+
+////////////////////////////////// Verwendete SosciSurvey-Funktionen: //////////////////////////////////
+
+readGET()		        https://www.soscisurvey.de/help/doku.php/de:create:functions:readget
+registerVariable()	https://www.soscisurvey.de/help/doku.php/de:create:functions:registervariable
+put()			          https://www.soscisurvey.de/help/doku.php/de:create:functions:put
+value()		        	https://www.soscisurvey.de/help/doku.php/de:create:functions:value
+redirect()	      	https://www.soscisurvey.de/help/doku.php/de:create:functions:redirect
+statistic()	      	https://www.soscisurvey.de/help/doku.php/de:create:functions:statistic
+
+////////////////////////////////// PHP-Funktionen: ////////////////////////////////// 
+if()	          		http://php.net/manual/de/control-structures.if.php
+array()		        	http://php.net/manual/de/language.types.array.php
